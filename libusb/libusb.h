@@ -1744,6 +1744,9 @@ int LIBUSB_CALL libusb_interrupt_transfer(libusb_device_handle *dev_handle,
 	unsigned char endpoint, unsigned char *data, int length,
 	int *actual_length, unsigned int timeout);
 
+int LIBUSB_CALL libusb_nuvoton_mutex_lock(void);
+int LIBUSB_CALL libusb_nuvoton_mutex_unlock(void);
+
 /** \ingroup libusb_desc
  * Retrieve a descriptor from the default control pipe.
  * This is a convenience function which formulates the appropriate control

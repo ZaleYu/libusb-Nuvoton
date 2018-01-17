@@ -109,6 +109,8 @@ int windows_version = WINDOWS_UNDEFINED;
 // Concurrency
 static int concurrent_usage = -1;
 static usbi_mutex_t autoclaim_lock;
+usbi_mutex_t usbtransfer_lock;
+
 // API globals
 #define CHECK_WINUSBX_AVAILABLE(sub_api)		\
 	do {						\
@@ -194,6 +196,38 @@ static char *sanitize_path(const char *path)
 	}
 
 	return ret_path;
+}
+
+/*
+ * for the compatibility of Nuvoton tools
+ */
+static int usbi_nuc_mutex_init(usbi_mutex_t *mutex, char *path)
+{
+	char mutexName[128];
+	size_t i, size;
+	
+	usbi_dbg("Enter usbi_nuc_mutex_init");
+	if (!mutex || path == NULL)
+		return EINVAL;
+	
+	size = strlen(path);
+	usbi_dbg("strlen(path): %d", size);
+	for (i = 0; i < size; i++) {
+		path[i] = (char)tolower((int)path[i]); // Fix case too
+		if ((path[i] == '\\' ) || (path[i] == '.') || (path[i] == '#') || (path[i] == '&') ||
+			(path[i] == '-')   || (path[i] == '{') || (path[i] == '}')) {
+			path[i] = '_';
+		}
+	}
+	usbi_dbg("modified path: %s", path);
+	strcpy(mutexName, path);
+	strcat(mutexName, "-5004780a-b256-43f3-88f5-1c1a798e40b3");	
+	usbi_dbg("NUC mutexName: %s", mutexName);
+	
+	*mutex = CreateMutex(NULL, FALSE, mutexName);
+	if (!*mutex)
+		return ENOMEM;
+	return 0;
 }
 
 /*
@@ -1281,9 +1315,10 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 	const GUID *guid[MAX_ENUM_GUIDS];
 #define HCD_PASS 0
 #define HUB_PASS 1
-#define GEN_PASS 2
-#define DEV_PASS 3
-#define HID_PASS 4
+#define NUC_PASS 2
+#define GEN_PASS 3
+#define DEV_PASS 4
+#define HID_PASS 5
 	int r = LIBUSB_SUCCESS;
 	int api, sub_api;
 	size_t class_index = 0;
@@ -1307,15 +1342,17 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 
 	// PASS 1 : (re)enumerate HCDs (allows for HCD hotplug)
 	// PASS 2 : (re)enumerate HUBS
-	// PASS 3 : (re)enumerate generic USB devices (including driverless)
+	// PASS 3 : (re)enumerate Nuvoton Bulk USB devices
+	// PASS 4 : (re)enumerate generic USB devices (including driverless)
 	//           and list additional USB device interface GUIDs to explore
-	// PASS 4 : (re)enumerate master USB devices that have a device interface
-	// PASS 5+: (re)enumerate device interfaced GUIDs (including HID) and
+	// PASS 5 : (re)enumerate master USB devices that have a device interface
+	// PASS 6+: (re)enumerate device interfaced GUIDs (including HID) and
 	//           set the device interfaces.
 
 	// Init the GUID table
 	guid[HCD_PASS] = &GUID_DEVINTERFACE_USB_HOST_CONTROLLER;
 	guid[HUB_PASS] = &GUID_DEVINTERFACE_USB_HUB;
+	guid[NUC_PASS] = &GUID_CLASS_I82930_BULK;
 	guid[GEN_PASS] = NULL;
 	guid[DEV_PASS] = &GUID_DEVINTERFACE_USB_DEVICE;
 	HidD_GetHidGuid(&hid_guid);
@@ -1362,6 +1399,10 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 					usbi_warn(ctx, "could not sanitize device interface path for '%s'", dev_interface_details->DevicePath);
 					continue;
 				}
+				char *nuc_keyword = "VID_0416&PID_511C&MI_01";
+				if (strstr(dev_interface_path, nuc_keyword) != NULL) {
+					usbi_nuc_mutex_init(&usbtransfer_lock, dev_interface_path);
+				} 
 			} else {
 				// Workaround for a Nec/Renesas USB 3.0 driver bug where root hubs are
 				// being listed under the "NUSB3" PnP Symbolic Name rather than "USB".
@@ -1598,6 +1639,7 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 					break;
 				}
 				break;
+			case NUC_PASS:
 			case GEN_PASS:
 				r = init_device(dev, parent_dev, (uint8_t)port_nr, dev_id_path, dev_info_data.DevInst);
 				if (r == LIBUSB_SUCCESS) {
@@ -3641,6 +3683,8 @@ static void hid_close(int sub_api, struct libusb_device_handle *dev_handle)
 	struct windows_device_handle_priv *handle_priv = _device_handle_priv(dev_handle);
 	HANDLE file_handle;
 	int i;
+	if (HANDLE_VALID(usbtransfer_lock))
+		usbi_mutex_destroy(&usbtransfer_lock);
 
 	if (!api_hid_available)
 		return;

@@ -325,3 +325,13 @@ int API_EXPORTED libusb_interrupt_transfer(
 	return do_sync_bulk_transfer(dev_handle, endpoint, data, length,
 		transferred, timeout, LIBUSB_TRANSFER_TYPE_INTERRUPT);
 }
+
+int API_EXPORTED libusb_nuvoton_mutex_lock()
+{
+	return usbi_mutex_lock(&usbtransfer_lock);
+}
+
+int API_EXPORTED libusb_nuvoton_mutex_unlock()
+{
+	return usbi_mutex_unlock(&usbtransfer_lock);
+}

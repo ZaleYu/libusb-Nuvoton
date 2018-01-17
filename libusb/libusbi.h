@@ -1153,6 +1153,7 @@ extern const struct usbi_os_backend usbi_backend;
 
 extern struct list_head active_contexts_list;
 extern usbi_mutex_static_t active_contexts_lock;
+extern usbi_mutex_t usbtransfer_lock;
 
 #ifdef __cplusplus
 }
