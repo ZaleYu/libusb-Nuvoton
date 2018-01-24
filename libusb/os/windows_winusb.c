@@ -203,7 +203,7 @@ static char *sanitize_path(const char *path)
  */
 static int usbi_nuc_mutex_init(usbi_mutex_t *mutex, char *path)
 {
-	char mutexName[128];
+	char _path[128], mutexName[128];
 	size_t i, size;
 	
 	usbi_dbg("Enter usbi_nuc_mutex_init");
@@ -212,15 +212,16 @@ static int usbi_nuc_mutex_init(usbi_mutex_t *mutex, char *path)
 	
 	size = strlen(path);
 	usbi_dbg("strlen(path): %d", size);
+	strcpy(_path, path);
 	for (i = 0; i < size; i++) {
-		path[i] = (char)tolower((int)path[i]); // Fix case too
-		if ((path[i] == '\\' ) || (path[i] == '.') || (path[i] == '#') || (path[i] == '&') ||
-			(path[i] == '-')   || (path[i] == '{') || (path[i] == '}')) {
-			path[i] = '_';
+		_path[i] = (char)tolower((int)_path[i]); // Fix case too
+		if ((_path[i] == '\\' ) || (_path[i] == '.') || (_path[i] == '#') || (_path[i] == '&') ||
+			(_path[i] == '-')   || (_path[i] == '{') || (_path[i] == '}')) {
+			_path[i] = '_';
 		}
 	}
-	usbi_dbg("modified path: %s", path);
-	strcpy(mutexName, path);
+	usbi_dbg("modified path: %s", _path);
+	strcpy(mutexName, _path);
 	strcat(mutexName, "-5004780a-b256-43f3-88f5-1c1a798e40b3");	
 	usbi_dbg("NUC mutexName: %s", mutexName);
 	
@@ -1363,6 +1364,7 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 	if (unref_list == NULL)
 		return LIBUSB_ERROR_NO_MEM;
 
+	usbtransfer_lock = NULL;
 	for (pass = 0; ((pass < nb_guids) && (r == LIBUSB_SUCCESS)); pass++) {
 //#define ENUM_DEBUG
 #if defined(ENABLE_LOGGING) && defined(ENUM_DEBUG)
@@ -1399,8 +1401,15 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 					usbi_warn(ctx, "could not sanitize device interface path for '%s'", dev_interface_details->DevicePath);
 					continue;
 				}
-				char *nuc_keyword = "VID_0416&PID_511C&MI_01";
-				if (strstr(dev_interface_path, nuc_keyword) != NULL) {
+				char *nuc_keyword0 = "VID_0416&PID_511B&MI_0";
+				char *nuc_keyword1 = "VID_0416&PID_511C&MI_0";
+				char *nuc_keyword2 = "VID_0416&PID_511D&MI_0";
+				char *nuc_keyword3 = "VID_0416&PID_5200&MI_0";
+				if (((strstr(dev_interface_path, nuc_keyword0) != NULL)  ||
+					 (strstr(dev_interface_path, nuc_keyword1) != NULL)  ||
+					 (strstr(dev_interface_path, nuc_keyword2) != NULL)  ||
+					 (strstr(dev_interface_path, nuc_keyword3) != NULL)) &&
+					usbtransfer_lock == NULL) {
 					usbi_nuc_mutex_init(&usbtransfer_lock, dev_interface_path);
 				} 
 			} else {
