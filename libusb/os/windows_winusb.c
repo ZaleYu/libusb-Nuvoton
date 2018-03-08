@@ -1341,6 +1341,15 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 	unsigned int unref_size = 64;
 	unsigned int unref_cur = 0;
 
+	char *nuc_keyword0 = "VID_0416&PID_511B&MI_0";
+	char *nuc_keyword1 = "VID_0416&PID_511C&MI_0";
+	char *nuc_keyword2 = "VID_0416&PID_511D&MI_0";
+	char *nuc_keyword3 = "VID_0416&PID_5200&MI_0";
+	char *nuc_keyword4 = "VID_0416&PID_511B";
+	char *nuc_keyword5 = "VID_0416&PID_511C";
+	char *nuc_keyword6 = "VID_0416&PID_511D";
+	char *nuc_keyword7 = "VID_0416&PID_5200";
+
 	// PASS 1 : (re)enumerate HCDs (allows for HCD hotplug)
 	// PASS 2 : (re)enumerate HUBS
 	// PASS 3 : (re)enumerate Nuvoton Bulk USB devices
@@ -1366,9 +1375,10 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 
 	usbtransfer_lock = NULL;
 	for (pass = 0; ((pass < nb_guids) && (r == LIBUSB_SUCCESS)); pass++) {
-//#define ENUM_DEBUG
+#define ENUM_DEBUG
+#define ENABLE_LOGGING
 #if defined(ENABLE_LOGGING) && defined(ENUM_DEBUG)
-		const char *passname[] = { "HCD", "HUB", "GEN", "DEV", "HID", "EXT" };
+		const char *passname[] = { "HCD", "HUB", "NUC", "GEN", "DEV", "HID", "EXT" };
 		usbi_dbg("#### PROCESSING %ss %s", passname[(pass <= HID_PASS) ? pass : (HID_PASS + 1)],
 			(pass != GEN_PASS) ? guid_to_string(guid[pass]) : "");
 #endif
@@ -1401,10 +1411,7 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 					usbi_warn(ctx, "could not sanitize device interface path for '%s'", dev_interface_details->DevicePath);
 					continue;
 				}
-				char *nuc_keyword0 = "VID_0416&PID_511B&MI_0";
-				char *nuc_keyword1 = "VID_0416&PID_511C&MI_0";
-				char *nuc_keyword2 = "VID_0416&PID_511D&MI_0";
-				char *nuc_keyword3 = "VID_0416&PID_5200&MI_0";
+
 				if (((strstr(dev_interface_path, nuc_keyword0) != NULL)  ||
 					 (strstr(dev_interface_path, nuc_keyword1) != NULL)  ||
 					 (strstr(dev_interface_path, nuc_keyword2) != NULL)  ||
@@ -1535,7 +1542,20 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 
 				parent_priv = _device_priv(parent_dev);
 				// virtual USB devices are also listed during GEN - don't process these yet
-				if ((pass == GEN_PASS) && (parent_priv->apib->id != USB_API_HUB)) {
+				if ((pass == GEN_PASS) && (parent_priv->apib->id != USB_API_HUB) &&
+					(strstr(dev_id_path, nuc_keyword4) == NULL) &&
+					(strstr(dev_id_path, nuc_keyword5) == NULL) &&
+					(strstr(dev_id_path, nuc_keyword6) == NULL) &&
+					(strstr(dev_id_path, nuc_keyword7) == NULL)) {
+					libusb_unref_device(parent_dev);
+					continue;
+				}
+				
+				if ((pass == GEN_PASS) && (
+					(strstr(dev_id_path, nuc_keyword0) != NULL) ||
+					(strstr(dev_id_path, nuc_keyword1) != NULL) ||
+					(strstr(dev_id_path, nuc_keyword2) != NULL) ||
+					(strstr(dev_id_path, nuc_keyword3) != NULL))) {
 					libusb_unref_device(parent_dev);
 					continue;
 				}
