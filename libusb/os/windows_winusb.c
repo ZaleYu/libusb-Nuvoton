@@ -1317,9 +1317,10 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 #define HCD_PASS 0
 #define HUB_PASS 1
 #define NUC_PASS 2
-#define GEN_PASS 3
-#define DEV_PASS 4
-#define HID_PASS 5
+#define NUC2_PASS 3
+#define GEN_PASS 4
+#define DEV_PASS 5
+#define HID_PASS 6
 	int r = LIBUSB_SUCCESS;
 	int api, sub_api;
 	size_t class_index = 0;
@@ -1340,15 +1341,17 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 	libusb_device **unref_list, **new_unref_list;
 	unsigned int unref_size = 64;
 	unsigned int unref_cur = 0;
-
+	
 	char *nuc_keyword0 = "VID_0416&PID_511B&MI_0";
 	char *nuc_keyword1 = "VID_0416&PID_511C&MI_0";
 	char *nuc_keyword2 = "VID_0416&PID_511D&MI_0";
 	char *nuc_keyword3 = "VID_0416&PID_5200&MI_0";
-	char *nuc_keyword4 = "VID_0416&PID_511B";
-	char *nuc_keyword5 = "VID_0416&PID_511C";
-	char *nuc_keyword6 = "VID_0416&PID_511D";
-	char *nuc_keyword7 = "VID_0416&PID_5200";
+	char *nuc_keyword4 = "VID_0416&PID_5201&MI_0";
+	char *nuc_keyword5 = "VID_0416&PID_511B";
+	char *nuc_keyword6 = "VID_0416&PID_511C";
+	char *nuc_keyword7 = "VID_0416&PID_511D";
+	char *nuc_keyword8 = "VID_0416&PID_5200";
+	char *nuc_keyword9 = "VID_0416&PID_5201";
 
 	// PASS 1 : (re)enumerate HCDs (allows for HCD hotplug)
 	// PASS 2 : (re)enumerate HUBS
@@ -1363,6 +1366,7 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 	guid[HCD_PASS] = &GUID_DEVINTERFACE_USB_HOST_CONTROLLER;
 	guid[HUB_PASS] = &GUID_DEVINTERFACE_USB_HUB;
 	guid[NUC_PASS] = &GUID_CLASS_I82930_BULK;
+	guid[NUC2_PASS] = &GUID_OSR_DEVICE_INTERFACE;
 	guid[GEN_PASS] = NULL;
 	guid[DEV_PASS] = &GUID_DEVINTERFACE_USB_DEVICE;
 	HidD_GetHidGuid(&hid_guid);
@@ -1372,13 +1376,13 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 	unref_list = calloc(unref_size, sizeof(libusb_device *));
 	if (unref_list == NULL)
 		return LIBUSB_ERROR_NO_MEM;
-
+	
 	usbtransfer_lock = NULL;
 	for (pass = 0; ((pass < nb_guids) && (r == LIBUSB_SUCCESS)); pass++) {
 #define ENUM_DEBUG
 #define ENABLE_LOGGING
 #if defined(ENABLE_LOGGING) && defined(ENUM_DEBUG)
-		const char *passname[] = { "HCD", "HUB", "NUC", "GEN", "DEV", "HID", "EXT" };
+		const char *passname[] = { "HCD", "HUB", "NUC", "NUC2", "GEN", "DEV", "HID", "EXT" };
 		usbi_dbg("#### PROCESSING %ss %s", passname[(pass <= HID_PASS) ? pass : (HID_PASS + 1)],
 			(pass != GEN_PASS) ? guid_to_string(guid[pass]) : "");
 #endif
@@ -1390,23 +1394,22 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 			safe_free(dev_id_path);
 			priv = parent_priv = NULL;
 			dev = parent_dev = NULL;
-
 			// Safe loop: end of loop conditions
 			if (r != LIBUSB_SUCCESS)
 				break;
-
 			if ((pass == HCD_PASS) && (i == UINT8_MAX)) {
 				usbi_warn(ctx, "program assertion failed - found more than %d buses, skipping the rest.", UINT8_MAX);
 				break;
 			}
-
 			if (pass != GEN_PASS) {
 				// Except for GEN, all passes deal with device interfaces
 				dev_interface_details = get_interface_details(ctx, &dev_info, &dev_info_data, guid[pass], i);
-				if (dev_interface_details == NULL)
+				if (dev_interface_details == NULL) {
+					usbi_dbg("could not get interface details");
 					break;
-
+				}					
 				dev_interface_path = sanitize_path(dev_interface_details->DevicePath);
+				usbi_dbg("dev_interface_path: %s", dev_interface_path);
 				if (dev_interface_path == NULL) {
 					usbi_warn(ctx, "could not sanitize device interface path for '%s'", dev_interface_details->DevicePath);
 					continue;
@@ -1415,7 +1418,8 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 				if (((strstr(dev_interface_path, nuc_keyword0) != NULL)  ||
 					 (strstr(dev_interface_path, nuc_keyword1) != NULL)  ||
 					 (strstr(dev_interface_path, nuc_keyword2) != NULL)  ||
-					 (strstr(dev_interface_path, nuc_keyword3) != NULL)) &&
+					 (strstr(dev_interface_path, nuc_keyword3) != NULL)  ||
+					 (strstr(dev_interface_path, nuc_keyword4) != NULL)) &&
 					usbtransfer_lock == NULL) {
 					usbi_nuc_mutex_init(&usbtransfer_lock, dev_interface_path);
 				} 
@@ -1474,7 +1478,7 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 				if (!pSetupDiGetDeviceRegistryPropertyA(dev_info, &dev_info_data, SPDRP_DRIVER,
 					&reg_type, (BYTE *)strbuf, size, &size)) {
 						usbi_info(ctx, "The following device has no driver: '%s'", dev_id_path);
-						usbi_info(ctx, "libusb will not be able to access it.");
+						usbi_info(ctx, "libusb will not be able to access it.");						
 				}
 				// ...and to add the additional device interface GUIDs
 				key = pSetupDiOpenDevRegKey(dev_info, &dev_info_data, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
@@ -1543,10 +1547,11 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 				parent_priv = _device_priv(parent_dev);
 				// virtual USB devices are also listed during GEN - don't process these yet
 				if ((pass == GEN_PASS) && (parent_priv->apib->id != USB_API_HUB) &&
-					(strstr(dev_id_path, nuc_keyword4) == NULL) &&
 					(strstr(dev_id_path, nuc_keyword5) == NULL) &&
 					(strstr(dev_id_path, nuc_keyword6) == NULL) &&
-					(strstr(dev_id_path, nuc_keyword7) == NULL)) {
+					(strstr(dev_id_path, nuc_keyword7) == NULL) &&
+					(strstr(dev_id_path, nuc_keyword8) == NULL) &&
+					(strstr(dev_id_path, nuc_keyword9) == NULL)) {
 					libusb_unref_device(parent_dev);
 					continue;
 				}
@@ -1555,14 +1560,15 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 					(strstr(dev_id_path, nuc_keyword0) != NULL) ||
 					(strstr(dev_id_path, nuc_keyword1) != NULL) ||
 					(strstr(dev_id_path, nuc_keyword2) != NULL) ||
-					(strstr(dev_id_path, nuc_keyword3) != NULL))) {
+					(strstr(dev_id_path, nuc_keyword3) != NULL) ||
+					(strstr(dev_id_path, nuc_keyword4) != NULL))) {
 					libusb_unref_device(parent_dev);
 					continue;
 				}
 
 				break;
 			}
-
+		
 			// Create new or match existing device, using the (hashed) device_id as session id
 			if (pass <= DEV_PASS) {	// For subsequent passes, we'll lookup the parent
 				// These are the passes that create "new" devices
@@ -1669,6 +1675,7 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 				}
 				break;
 			case NUC_PASS:
+			case NUC2_PASS:			
 			case GEN_PASS:
 				r = init_device(dev, parent_dev, (uint8_t)port_nr, dev_id_path, dev_info_data.DevInst);
 				if (r == LIBUSB_SUCCESS) {
@@ -2336,7 +2343,7 @@ const struct windows_usb_api_backend usb_api_backend[USB_API_MAX] = {
 		ARRAYSIZE(winusbx_driver_names),
 		winusbx_init,
 		winusbx_exit,
-		winusbx_open,
+		hid_open,// winusbx_open, <- Nuvoton wants to use hid_open instead of winusbx_open
 		winusbx_close,
 		winusbx_configure_endpoints,
 		winusbx_claim_interface,
@@ -3613,7 +3620,7 @@ static int hid_open(int sub_api, struct libusb_device_handle *dev_handle)
 				}
 				priv->usb_interface[i].restricted_functionality = true;
 			}
-			handle_priv->interface_handle[i].api_handle = hid_handle;
+			handle_priv->interface_handle[i].api_handle = hid_handle;			
 		}
 	}
 
@@ -3714,7 +3721,7 @@ static void hid_close(int sub_api, struct libusb_device_handle *dev_handle)
 	int i;
 	if (HANDLE_VALID(usbtransfer_lock))
 		usbi_mutex_destroy(&usbtransfer_lock);
-
+	
 	if (!api_hid_available)
 		return;
 
@@ -3942,7 +3949,7 @@ static int hid_submit_bulk_transfer(int sub_api, struct usbi_transfer *itransfer
 		return LIBUSB_ERROR_NO_MEM;
 
 	transfer_priv->hid_expected_size = length;
-
+	
 	if (direction_in) {
 		transfer_priv->hid_dest = transfer->buffer;
 		usbi_dbg("reading %d bytes (report ID: 0x00)", length);
@@ -3957,7 +3964,7 @@ static int hid_submit_bulk_transfer(int sub_api, struct usbi_transfer *itransfer
 		usbi_dbg("writing %d bytes (report ID: 0x%02X)", length, transfer_priv->hid_buffer[0]);
 		ret = WriteFile(wfd.handle, transfer_priv->hid_buffer, length, &size, wfd.overlapped);
 	}
-
+	
 	if (!ret) {
 		if (GetLastError() != ERROR_IO_PENDING) {
 			usbi_err(ctx, "HID transfer failed: %s", windows_error_str(0));
@@ -3985,7 +3992,7 @@ static int hid_submit_bulk_transfer(int sub_api, struct usbi_transfer *itransfer
 
 	transfer_priv->pollable_fd = wfd;
 	transfer_priv->interface_number = (uint8_t)current_interface;
-
+	
 	return r;
 }
 
