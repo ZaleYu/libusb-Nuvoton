@@ -340,6 +340,9 @@ static int parse_interface(libusb_context *ctx,
 				parsed += r;
 				size -= r;
 			}
+			for (i = 0; i < ifp->bNumEndpoints; i++) {
+				usbi_dbg("ifp->endpoint[%d].bEndpointAddress(%02X)", i, ifp->endpoint[i].bEndpointAddress);
+			}
 		}
 
 		/* We check to see if it's an alternate to this one */
@@ -402,7 +405,7 @@ static int parse_configuration(struct libusb_context *ctx,
 		usbi_err(ctx, "too many interfaces (%d)", config->bNumInterfaces);
 		return LIBUSB_ERROR_IO;
 	}
-
+	usbi_dbg("config->bNumInterfaces(%d)", config->bNumInterfaces);
 	usb_interface = calloc(config->bNumInterfaces, sizeof(struct libusb_interface));
 	config->interface = usb_interface;
 	if (!usb_interface)
@@ -466,7 +469,7 @@ static int parse_configuration(struct libusb_context *ctx,
 				config->extra_length = len;
 			}
 		}
-
+		usbi_dbg("parse_interface(%d)", i);
 		r = parse_interface(ctx, usb_interface + i, buffer, size, host_endian);
 		if (r < 0)
 			goto err;
