@@ -1349,6 +1349,8 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 	char *nuc_keyword4 = "VID_0416&PID_5201&MI_0";
 	char *nuc_keyword5 = "VID_0416&PID_5202&MI_0";
 	char *nuc_keyword6 = "VID_0416&PID_5203&MI_0";
+	char *nuc_keyword7 = "VID_0416&PID_5204&MI_0";
+	char *nuc_keyword8 = "VID_0416&PID_5205&MI_0";
 	char *nuc_keyworda = "VID_0416&PID_511B";
 	char *nuc_keywordb = "VID_0416&PID_511C";
 	char *nuc_keywordc = "VID_0416&PID_511D";
@@ -1356,6 +1358,8 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 	char *nuc_keyworde = "VID_0416&PID_5201";
 	char *nuc_keywordf = "VID_0416&PID_5202";
 	char *nuc_keywordg = "VID_0416&PID_5203";
+	char *nuc_keywordh = "VID_0416&PID_5204";
+	char *nuc_keywordi = "VID_0416&PID_5205";
 	// PASS 1 : (re)enumerate HCDs (allows for HCD hotplug)
 	// PASS 2 : (re)enumerate HUBS
 	// PASS 3 : (re)enumerate Nuvoton Bulk USB devices
@@ -1424,7 +1428,9 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 					 (strstr(dev_interface_path, nuc_keyword3) != NULL)  ||
 					 (strstr(dev_interface_path, nuc_keyword4) != NULL)  ||
 					 (strstr(dev_interface_path, nuc_keyword5) != NULL)  ||
-					 (strstr(dev_interface_path, nuc_keyword6) != NULL)) &&
+					 (strstr(dev_interface_path, nuc_keyword6) != NULL)  ||
+					 (strstr(dev_interface_path, nuc_keyword7) != NULL)  ||
+					 (strstr(dev_interface_path, nuc_keyword8) != NULL)) &&
 					usbtransfer_lock == NULL) {
 					usbi_nuc_mutex_init(&usbtransfer_lock, dev_interface_path);
 				} 
@@ -1558,7 +1564,9 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 					(strstr(dev_id_path, nuc_keywordd) == NULL) &&
 					(strstr(dev_id_path, nuc_keyworde) == NULL) &&
 					(strstr(dev_id_path, nuc_keywordf) == NULL) &&
-					(strstr(dev_id_path, nuc_keywordg) == NULL)) {
+					(strstr(dev_id_path, nuc_keywordg) == NULL) &&
+					(strstr(dev_id_path, nuc_keywordh) == NULL) &&
+					(strstr(dev_id_path, nuc_keywordi) == NULL)) {
 					usbi_dbg("libusb_unref_device(parent_dev) for '%s' (virtual USB devices)", dev_id_path);
 					libusb_unref_device(parent_dev);
 					continue;
@@ -1571,7 +1579,9 @@ static int windows_get_device_list(struct libusb_context *ctx, struct discovered
 					(strstr(dev_id_path, nuc_keyword3) != NULL) ||
 					(strstr(dev_id_path, nuc_keyword4) != NULL) ||
 					(strstr(dev_id_path, nuc_keyword5) != NULL) ||
-					(strstr(dev_id_path, nuc_keyword6) != NULL))) {
+					(strstr(dev_id_path, nuc_keyword6) != NULL) ||
+					(strstr(dev_id_path, nuc_keyword7) != NULL) ||
+					(strstr(dev_id_path, nuc_keyword8) != NULL))) {
 					usbi_dbg("libusb_unref_device(parent_dev) for '%s'", dev_id_path);
 					libusb_unref_device(parent_dev);
 					continue;
